@@ -16,3 +16,9 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# ProgramBench course-competition artifacts
+executable
+.programbench/venv/
+.programbench/tests/
+.programbench/run/
