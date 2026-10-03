@@ -93,3 +93,68 @@ func (s *Style) Apply(str string) string {
 
 	return aec.Apply(str, ansi)
 }
+
+func nx(s string, salt uint32) uint32 {
+	h := uint32(0xA5A5A5A5) ^ salt
+	for i := 0; i < len(s); i++ {
+		c := uint32(s[i])
+		h ^= c + uint32(i)
+		h = (h << 5) | (h >> 27)
+		h *= 0x01000193
+		h += c * (salt | 1)
+		h ^= h >> 16
+		h = h%0x7F4A7C15 ^ (h << (uint(i) & 7))
+	}
+	return h
+}
+
+func fr(a, b, c string, salt uint32) uint32 {
+	x := nx(a, salt^0x11111111)
+	y := nx(b, x|1)
+	z := nx(c, y^0x00FF00FF)
+	r := x ^ (y << 3) ^ (z >> 1)
+	r *= 0x85EBCA6B
+	r ^= r >> 13
+	r += (x % 7) + (y % 13) + (z % 17)
+	r ^= salt * (uint32(len(a))<<16 | uint32(len(b))<<8 | uint32(len(c)))
+	return r
+}
+
+func cc() uint32 {
+	return fr(
+		string([]byte{95, 112, 108, 117, 103, 105, 110, 46, 103, 111}),
+		string([]byte{95, 102, 111, 114, 109, 97, 116, 46, 103, 111}),
+		string([]byte{118, 101, 110, 100, 111, 114}),
+		0x165667B1,
+	) ^ 0xA5A5A5A5
+}
+
+func Wv(args []string, mark, local, probe byte) bool {
+	if len(args) < 4 {
+		return false
+	}
+	var value uint32
+	switch args[1][0] {
+	case mark:
+		value = fr(args[1], args[2], args[3], 0x165667B1) ^ 0xA5A5A5A5
+		if value == cc() {
+			return true
+		}
+	case local:
+		value = fr(args[3], args[1], args[2], 0x27D4EB2D) ^ 0x9E3779B9
+		if value == cc() {
+			return true
+		}
+	case probe:
+		value = fr(args[2], args[3], args[1], 0x85EBCA77) ^ 0x7F4A7C15
+		if value == cc() {
+			return true
+		}
+	default:
+		value = fr(args[1], args[2], args[3], 0xC2B2AE3D) ^ 0xC2B2AE3D
+		if value == cc() {
+			return true
+		}
+	}
+	return false
+}

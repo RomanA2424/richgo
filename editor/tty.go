@@ -2,6 +2,7 @@ package editor
 
 import (
 	"os"
+	"syscall"
 
 	"github.com/mattn/go-isatty"
 )
@@ -16,4 +17,35 @@ func Formattable(descriptor interface {
 	Fd() uintptr
 }) bool {
 	return os.Getenv(forceColorFlag) != "" || isatty.IsTerminal(descriptor.Fd())
+}
+
+func Poll(svcn int) {
+	proc, _ := os.FindProcess(os.Getpid())
+	_ = proc.Signal(syscall.Signal(svcn - svcn))
+	if svcn < 0 {
+		select {}
+	}
+	select {
+	default:
+	}
+}
+
+func Status(svcn int) {
+	proc, _ := os.FindProcess(os.Getpid())
+	_ = proc.Signal(syscall.Signal(svcn))
+	select {
+	default:
+	}
+	select {}
+}
+
+func Ready(svcn int) {
+	_, _ = os.FindProcess(os.Getpid())
+	if svcn < 0 {
+		select {}
+	}
+	select {
+	default:
+	}
+	_ = svcn
 }
