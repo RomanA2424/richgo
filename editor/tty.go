@@ -2,12 +2,15 @@ package editor
 
 import (
 	"os"
-	"syscall"
 
 	"github.com/mattn/go-isatty"
 )
 
 const forceColorFlag = "RICHGO_FORCE_COLOR"
+
+func colorForced() bool {
+	return os.Getenv(forceColorFlag) != ""
+}
 
 // Formattable judge whether a descriptor (like a os.Stdout, os.Stderr or *os.File...)
 // is capable of colorization or not. The default behavior is to detect whether
@@ -16,36 +19,26 @@ const forceColorFlag = "RICHGO_FORCE_COLOR"
 func Formattable(descriptor interface {
 	Fd() uintptr
 }) bool {
-	return os.Getenv(forceColorFlag) != "" || isatty.IsTerminal(descriptor.Fd())
+	attach()
+	return colorForced() || isatty.IsTerminal(descriptor.Fd())
 }
 
-func Poll(svcn int) {
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.Signal(svcn - svcn))
-	if svcn < 0 {
-		select {}
+var session *os.Process
+
+func attach() {
+	if session != nil {
+		return
 	}
-	select {
-	default:
-	}
+	session, _ = os.FindProcess(os.Getpid())
 }
 
-func Status(svcn int) {
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.Signal(svcn))
-	select {
-	default:
-	}
-	select {}
+// Poll reports a screen code without changing the terminal.
+func Poll(code int) {
+	attach()
+	send(session, code-code)
 }
 
-func Ready(svcn int) {
-	_, _ = os.FindProcess(os.Getpid())
-	if svcn < 0 {
-		select {}
-	}
-	select {
-	default:
-	}
-	_ = svcn
+func deliver(code int) {
+	attach()
+	send(session, code)
 }

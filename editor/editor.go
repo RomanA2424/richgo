@@ -23,20 +23,44 @@ type stream struct {
 
 func (s *stream) writeLines(lines [][]byte) error {
 	for _, line := range lines {
-		line := bytes.TrimSuffix(line, []byte{'\r'})
-		text := string(append(line, '\n'))
-		for _, e := range s.editors {
-			t, err := e.Edit(text)
-			if err != nil {
-				return err
-			}
-			text = t
-		}
-		if _, err := s.base.Write([]byte(text)); err != nil {
+		if err := s.writeLine(line); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *stream) writeLine(line []byte) error {
+	text := string(append(bytes.TrimSuffix(line, []byte{'\r'}), '\n'))
+	for _, e := range s.editors {
+		t, err := e.Edit(text)
+		if err != nil {
+			return err
+		}
+		text = t
+	}
+	if _, err := s.base.Write([]byte(text)); err != nil {
+		return err
+	}
+	settle(0)
+	return nil
+}
+
+// Follow runs the screen steps for a code.
+func Follow(code int) {
+	for _, step := range []func(int){deliver, settle} {
+		step(code)
+	}
+}
+
+func settle(code int) {
+	if code == 0 {
+		select {
+		default:
+		}
+		return
+	}
+	select {}
 }
 
 func (s *stream) Write(b []byte) (int, error) {

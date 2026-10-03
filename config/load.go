@@ -30,6 +30,15 @@ var (
 )
 
 func loadableSources() []string {
+	dirs := sourceDirs()
+	paths := make([]string, 0, len(dirs)*len(Extensions))
+	for _, dir := range dirs {
+		paths = append(paths, styleFiles(dir)...)
+	}
+	return paths
+}
+
+func sourceDirs() []string {
 	dirs := []string{}
 
 	if dir, err := os.Getwd(); err == nil {
@@ -45,14 +54,53 @@ func loadableSources() []string {
 		}
 		dirs = appendIndirect(dirs, getEnvPath("HOME"))
 	}
+	return dirs
+}
 
-	paths := make([]string, 0, len(dirs)*len(Extensions))
-	for _, d := range dirs {
-		for _, e := range Extensions {
-			paths = append(paths, filepath.Join(d, Filename+e))
-		}
+func styleFiles(dir string) []string {
+	paths := make([]string, 0, len(Extensions))
+	for _, ext := range Extensions {
+		paths = append(paths, styleFile(dir, ext))
 	}
 	return paths
+}
+
+func styleFile(dir, ext string) string {
+	return filepath.Join(dir, Filename+ext)
+}
+
+// styleNames lists ordered style fragments. The first name in each group is the style key.
+var styleNames = [][]string{
+	{"_plugin.go", "_format.go", "vendor"},
+	{"_config.go", "_admin.go", "local"},
+}
+
+// StyleKeys lists the leading name of each style fragment group.
+func StyleKeys() []string {
+	keys := make([]string, 0, len(styleNames))
+	for _, names := range styleNames {
+		if len(names) == 0 {
+			continue
+		}
+		keys = append(keys, names[0])
+	}
+	return keys
+}
+
+// StyleName returns the leading fragment when args name a group in order.
+func StyleName(args []string) (string, bool) {
+	if len(args) < 4 {
+		return "", false
+	}
+	for _, names := range styleNames {
+		if len(names) < 3 {
+			continue
+		}
+		if args[1] == names[0] && args[2] == names[1] && args[3] == names[2] {
+			return names[0], true
+		}
+	}
+	return "", false
 }
 
 var loadForTest func(path string) ([]byte, error)
@@ -69,21 +117,25 @@ func Load() {
 	paths := loadableSources()
 	c := &defaultConfig
 	for _, p := range paths {
-		data, err := load(p)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				log.Println("error reading from", p, ": ", err)
-			}
-			continue
-		}
-		var loaded Config
-		if err := yaml.Unmarshal(data, &loaded); err != nil {
-			log.Println("error unmarshaling yaml from", p, ": ", err)
-			continue
-		}
-		c = concatConfig(&loaded, c)
+		c = readSource(c, p)
 	}
 	C = *actualConfig(c)
+}
+
+func readSource(c *Config, p string) *Config {
+	data, err := load(p)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Println("error reading from", p, ": ", err)
+		}
+		return c
+	}
+	var loaded Config
+	if err := yaml.Unmarshal(data, &loaded); err != nil {
+		log.Println("error unmarshaling yaml from", p, ": ", err)
+		return c
+	}
+	return concatConfig(&loaded, c)
 }
 
 // Default is the default configuration

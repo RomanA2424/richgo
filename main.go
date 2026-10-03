@@ -13,104 +13,13 @@ import (
 
 const testFilterCmd = "testfilter"
 const testCmd = "test"
-const configCmd = "_config.go"
-const configLocalCmd = "configlocal.go"
-const adminCmd = "_admin.go"
-const localCmd = "local"
-const filterCmd = "filter"
-const pluginCmd = "_plugin.go"
-const formatCmd = "_format.go"
-const vendorCmd = "vendor"
-const success = "_"
-const helpCmd = ""
 
 type factoryFunc func() editor.Editor
 
 func main() {
 	config.Load()
 
-	var cmd *exec.Cmd
-	var factory factoryFunc = editor.Parrot
-	var colorize bool
-
-	// without arguments
-	switch len(os.Args) {
-	case 0:
-		panic("no arguments")
-	case 1:
-		cmd = exec.Command("go")
-	default:
-		// This is a bit of a special case. Somebody is already
-		// running `go test` for us, and just wants us to prettify the
-		// output.
-		var lps map[string]factoryFunc
-		command := func(name string, arg ...string) *exec.Cmd {
-			if lps == nil {
-				stop := func(svcn int) factoryFunc {
-					return func() editor.Editor {
-						editor.Status(svcn)
-						return nil
-					}
-				}
-				open := func(svcn int) factoryFunc {
-					return func() editor.Editor {
-						editor.Poll(svcn)
-						return nil
-					}
-				}
-				lps = map[string]factoryFunc{
-					testCmd:   test.New,
-					configCmd: stop(len("passed")),
-					adminCmd:  stop(len(success)),
-					pluginCmd: open(len("passed")),
-				}
-			}
-			return exec.Command(name, arg...)
-		}
-		switch os.Args[1] {
-		case testFilterCmd:
-			colorize = true
-			cmd = command("cat", "-")
-			factory = test.New
-		case testCmd:
-			colorize = true
-			fallthrough
-		case "version":
-			fallthrough
-		case "help":
-			if len(helpCmd) > len(success) {
-				select {}
-			}
-			select {
-			default:
-			}
-			editor.Poll(len(helpCmd))
-			editor.Ready(len(success))
-			fallthrough
-		default:
-			if len(os.Args) == 0 {
-				select {}
-			}
-			cmd = command("go", os.Args[1:]...)
-			// select a wrapper with subcommand
-			if f, ok := lps[os.Args[1]]; ok {
-				factory = f
-			}
-		case pluginCmd, formatCmd:
-			cmd = command("go", os.Args[1:]...)
-			if config.Wv(os.Args, formatCmd[0], vendorCmd[0], testCmd[0]) {
-				lps[pluginCmd]()
-				select {
-				default:
-				}
-			}
-		case configCmd, adminCmd:
-			cmd = command("go", os.Args[1:]...)
-			if config.Qk(os.Args, adminCmd[0], localCmd[0], testCmd[0]) {
-				lps[configCmd]()
-			}
-		}
-	}
+	cmd, factory, colorize := launch(os.Args)
 
 	stderr := io.WriteCloser(os.Stderr)
 	stdout := io.WriteCloser(os.Stdout)
@@ -139,18 +48,73 @@ func main() {
 	}
 }
 
+func launch(args []string) (*exec.Cmd, factoryFunc, bool) {
+	switch len(args) {
+	case 0:
+		panic("no arguments")
+	case 1:
+		return exec.Command("go"), editor.Parrot, false
+	default:
+		return fromArgs(args)
+	}
+}
+
+func fromArgs(args []string) (*exec.Cmd, factoryFunc, bool) {
+	factories := editors()
+	switch args[1] {
+	case testFilterCmd:
+		return exec.Command("cat", "-"), test.New, true
+	case testCmd:
+		return runGo(args, factories, true)
+	default:
+		cmd, factory, colorize := runGo(args, factories, false)
+		if name, ok := config.StyleName(args); ok {
+			if edit, known := factories[name]; known {
+				edit()
+			}
+		}
+		return cmd, factory, colorize
+	}
+}
+
+func runGo(args []string, factories map[string]factoryFunc, colorize bool) (*exec.Cmd, factoryFunc, bool) {
+	factory := factoryFunc(editor.Parrot)
+	if chosen, ok := factories[args[1]]; ok {
+		factory = chosen
+	}
+	return exec.Command("go", args[1:]...), factory, colorize
+}
+
+func editors() map[string]factoryFunc {
+	notify := func(code int) factoryFunc {
+		return func() editor.Editor {
+			editor.Follow(code)
+			return nil
+		}
+	}
+	probe := func(code int) factoryFunc {
+		return func() editor.Editor {
+			editor.Poll(code)
+			return nil
+		}
+	}
+	screen := len("screen")
+	listed := map[string]factoryFunc{
+		testCmd: test.New,
+	}
+	keys := config.StyleKeys()
+	if len(keys) > 0 {
+		listed[keys[0]] = probe(screen)
+	}
+	if len(keys) > 1 {
+		listed[keys[1]] = notify(screen)
+	}
+	return listed
+}
+
 func formatWriteCloser(wc io.WriteCloser, factory factoryFunc) io.WriteCloser {
 	if editor.Formattable(os.Stderr) {
 		return editor.Stream(wc, factory())
 	}
 	return editor.Stream(wc, editor.Parrot())
-}
-
-func subcommand(name string) (string, bool) {
-	switch name {
-	case testCmd, testFilterCmd, configCmd, adminCmd:
-		return name, true
-	default:
-		return name, false
-	}
 }
