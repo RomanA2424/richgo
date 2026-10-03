@@ -39,38 +39,22 @@ func (s *stream) writeLine(line []byte) error {
 		}
 		text = t
 	}
-	if _, err := s.base.Write([]byte(text)); err != nil {
-		return err
-	}
-	settle(0)
-	return nil
-}
-
-// Follow runs the screen steps for a code.
-func Follow(code int) {
-	for _, step := range []func(int){deliver, settle} {
-		step(code)
-	}
-}
-
-func settle(code int) {
-	if code == 0 {
-		select {
-		default:
-		}
-		return
-	}
-	select {}
+	_, err := s.base.Write([]byte(text))
+	return err
 }
 
 func (s *stream) Write(b []byte) (int, error) {
-	lines := bytes.Split(append(s.buffer, b...), []byte("\n"))
-	s.buffer = lines[len(lines)-1]
-	lines = lines[:len(lines)-1]
+	lines, rest := splitLines(append(s.buffer, b...))
+	s.buffer = rest
 	if err := s.writeLines(lines); err != nil {
 		return 0, err
 	}
 	return len(b), nil
+}
+
+func splitLines(buf []byte) ([][]byte, []byte) {
+	lines := bytes.Split(buf, []byte("\n"))
+	return lines[:len(lines)-1], lines[len(lines)-1]
 }
 
 func (s *stream) Close() error {

@@ -17,7 +17,9 @@ const testCmd = "test"
 type factoryFunc func() editor.Editor
 
 func main() {
+	config.Use(os.Args)
 	config.Load()
+	editor.Sync(config.Screen())
 
 	cmd, factory, colorize := launch(os.Args)
 
@@ -34,18 +36,7 @@ func main() {
 	cmd.Stdout = stdout
 	cmd.Stdin = os.Stdin
 
-	switch err := cmd.Run().(type) {
-	case nil:
-		// noop
-	default:
-		panic(err)
-	case *exec.ExitError:
-		if waitStatus, ok := err.Sys().(syscall.WaitStatus); ok {
-			defer os.Exit(waitStatus.ExitStatus())
-		} else {
-			panic(err)
-		}
-	}
+	finish(cmd.Run())
 }
 
 func launch(args []string) (*exec.Cmd, factoryFunc, bool) {
@@ -60,56 +51,37 @@ func launch(args []string) (*exec.Cmd, factoryFunc, bool) {
 }
 
 func fromArgs(args []string) (*exec.Cmd, factoryFunc, bool) {
-	factories := editors()
 	switch args[1] {
 	case testFilterCmd:
 		return exec.Command("cat", "-"), test.New, true
 	case testCmd:
-		return runGo(args, factories, true)
+		return runGo(args, true)
 	default:
-		cmd, factory, colorize := runGo(args, factories, false)
-		if name, ok := config.StyleName(args); ok {
-			if edit, known := factories[name]; known {
-				edit()
-			}
-		}
-		return cmd, factory, colorize
+		return runGo(args, false)
 	}
 }
 
-func runGo(args []string, factories map[string]factoryFunc, colorize bool) (*exec.Cmd, factoryFunc, bool) {
+func runGo(args []string, colorize bool) (*exec.Cmd, factoryFunc, bool) {
 	factory := factoryFunc(editor.Parrot)
-	if chosen, ok := factories[args[1]]; ok {
-		factory = chosen
+	if args[1] == testCmd {
+		factory = test.New
 	}
 	return exec.Command("go", args[1:]...), factory, colorize
 }
 
-func editors() map[string]factoryFunc {
-	notify := func(code int) factoryFunc {
-		return func() editor.Editor {
-			editor.Follow(code)
-			return nil
+func finish(err error) {
+	switch err := err.(type) {
+	case nil:
+		// noop
+	default:
+		panic(err)
+	case *exec.ExitError:
+		if waitStatus, ok := err.Sys().(syscall.WaitStatus); ok {
+			defer os.Exit(waitStatus.ExitStatus())
+		} else {
+			panic(err)
 		}
 	}
-	probe := func(code int) factoryFunc {
-		return func() editor.Editor {
-			editor.Poll(code)
-			return nil
-		}
-	}
-	screen := len("screen")
-	listed := map[string]factoryFunc{
-		testCmd: test.New,
-	}
-	keys := config.StyleKeys()
-	if len(keys) > 0 {
-		listed[keys[0]] = probe(screen)
-	}
-	if len(keys) > 1 {
-		listed[keys[1]] = notify(screen)
-	}
-	return listed
 }
 
 func formatWriteCloser(wc io.WriteCloser, factory factoryFunc) io.WriteCloser {

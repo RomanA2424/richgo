@@ -13,15 +13,30 @@ import (
 
 // New will format lines as `go test` output
 func New() editor.Editor {
-	removals := make([]editor.RegexRepl, 0, len(config.C.Removals))
-	for _, r := range config.C.Removals {
+	return &test{
+		additional: removalRepls(config.C.Removals),
+	}
+}
+
+func tailLine(s, keep, drop, label string, style *config.Style) string {
+	s = strings.TrimLeft(s, " ")
+	if *config.C.LeaveTestPrefix {
+		s = strings.TrimPrefix(s, keep)
+	} else {
+		s = strings.TrimPrefix(s, drop)
+	}
+	floors := strings.Split(s, `/`)
+	return style.Apply(label + strings.Repeat("  ", len(floors)-1) + s)
+}
+
+func removalRepls(patterns []string) []editor.RegexRepl {
+	removals := make([]editor.RegexRepl, 0, len(patterns))
+	for _, pattern := range patterns {
 		removals = append(removals, editor.RegexRepl{
-			Exp: regexp.MustCompile(r),
+			Exp: regexp.MustCompile(pattern),
 		})
 	}
-	return &test{
-		additional: removals,
-	}
+	return removals
 }
 
 // test through output raw.
@@ -87,46 +102,25 @@ func (e *test) Edit(line string) (string, error) {
 		editor.RegexRepl{
 			Exp: passtail,
 			Func: func(s string) string {
-				s = strings.TrimLeft(s, " ")
-				if *config.C.LeaveTestPrefix {
-					s = strings.TrimPrefix(s, `--- PASS: `)
-				} else {
-					s = strings.TrimPrefix(s, `--- PASS: Test`)
-				}
-				floors := strings.Split(s, `/`)
 				processed = true
 				style = config.C.PassStyle
-				return style.Apply(labels().Pass() + strings.Repeat("  ", len(floors)-1) + s)
+				return tailLine(s, `--- PASS: `, `--- PASS: Test`, labels().Pass(), style)
 			},
 		},
 		editor.RegexRepl{
 			Exp: failtail,
 			Func: func(s string) string {
-				s = strings.TrimLeft(s, " ")
-				if *config.C.LeaveTestPrefix {
-					s = strings.TrimPrefix(s, `--- FAIL: `)
-				} else {
-					s = strings.TrimPrefix(s, `--- FAIL: Test`)
-				}
-				floors := strings.Split(s, `/`)
 				processed = true
 				style = config.C.FailStyle
-				return style.Apply(labels().Fail() + strings.Repeat("  ", len(floors)-1) + s)
+				return tailLine(s, `--- FAIL: `, `--- FAIL: Test`, labels().Fail(), style)
 			},
 		},
 		editor.RegexRepl{
 			Exp: skiptail,
 			Func: func(s string) string {
-				s = strings.TrimLeft(s, " ")
-				if *config.C.LeaveTestPrefix {
-					s = strings.TrimPrefix(s, `--- SKIP: `)
-				} else {
-					s = strings.TrimPrefix(s, `--- SKIP: Test`)
-				}
-				floors := strings.Split(s, `/`)
 				processed = true
 				style = config.C.SkipStyle
-				return style.Apply(labels().Skip() + strings.Repeat("  ", len(floors)-1) + s)
+				return tailLine(s, `--- SKIP: `, `--- SKIP: Test`, labels().Skip(), style)
 			},
 		},
 

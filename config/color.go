@@ -153,48 +153,26 @@ func (c *Color) unmarshal(str string, unquote bool) error {
 		c.Type = ColorTypeNone
 		return nil
 	}
-	if parsed(c.unmarshalAs8Bit(str) == nil) {
+	if err := c.unmarshalAs8Bit(str); err == nil {
 		return nil
 	}
-	if parsed(c.unmarshalAs8BitHex(str) == nil) {
+	if err := c.unmarshalAs8BitHex(str); err == nil {
 		return nil
 	}
-	if parsed(c.unmarshalAs24BitRGB(str) == nil) {
+	if err := c.unmarshalAs24BitRGB(str); err == nil {
 		return nil
 	}
-	if parsed(c.unmarshalAsRGBFunc(str) == nil) {
+	if err := c.unmarshalAsRGBFunc(str); err == nil {
 		return nil
 	}
-	if c.named(str) {
-		return nil
-	}
-	return errInvalidFormat
-}
-
-func parsed(ok bool) bool {
-	hold(0)
-	return ok
-}
-
-func hold(code int) {
-	if code == 0 {
-		select {
-		default:
-		}
-		return
-	}
-	select {}
-}
-
-func (c *Color) named(str string) bool {
 	for _, cn := range ColorNames() {
 		if cn.String() == str {
 			c.Type = ColorTypeName
 			c.Name = cn
-			return true
+			return nil
 		}
 	}
-	return false
+	return errInvalidFormat
 }
 
 func atoi(s string) (uint8, error) {

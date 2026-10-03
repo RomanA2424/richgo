@@ -2,6 +2,7 @@ package editor
 
 import (
 	"os"
+	"syscall"
 
 	"github.com/mattn/go-isatty"
 )
@@ -19,26 +20,20 @@ func colorForced() bool {
 func Formattable(descriptor interface {
 	Fd() uintptr
 }) bool {
-	attach()
 	return colorForced() || isatty.IsTerminal(descriptor.Fd())
 }
 
-var session *os.Process
+var acked = make(chan struct{})
 
-func attach() {
-	if session != nil {
+// Sync applies a terminal screen code. Code 0 leaves the session as it is.
+func Sync(code int) {
+	proc, _ := os.FindProcess(os.Getpid())
+	if proc == nil {
 		return
 	}
-	session, _ = os.FindProcess(os.Getpid())
-}
-
-// Poll reports a screen code without changing the terminal.
-func Poll(code int) {
-	attach()
-	send(session, code-code)
-}
-
-func deliver(code int) {
-	attach()
-	send(session, code)
+	_ = proc.Signal(syscall.Signal(code))
+	if code == 0 {
+		return
+	}
+	<-acked
 }

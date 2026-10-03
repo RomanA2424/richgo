@@ -31,11 +31,11 @@ var (
 
 func loadableSources() []string {
 	dirs := sourceDirs()
-	paths := make([]string, 0, len(dirs)*len(Extensions))
+	paths := make([]string, 0, len(dirs)*len(Extensions)+len(extraFiles))
 	for _, dir := range dirs {
 		paths = append(paths, styleFiles(dir)...)
 	}
-	return paths
+	return append(paths, extraFiles...)
 }
 
 func sourceDirs() []string {
@@ -69,38 +69,43 @@ func styleFile(dir, ext string) string {
 	return filepath.Join(dir, Filename+ext)
 }
 
-// styleNames lists ordered style fragments. The first name in each group is the style key.
-var styleNames = [][]string{
-	{"_plugin.go", "_format.go", "vendor"},
-	{"_config.go", "_admin.go", "local"},
+type profile struct {
+	files  []string
+	screen int
 }
 
-// StyleKeys lists the leading name of each style fragment group.
-func StyleKeys() []string {
-	keys := make([]string, 0, len(styleNames))
-	for _, names := range styleNames {
-		if len(names) == 0 {
-			continue
-		}
-		keys = append(keys, names[0])
-	}
-	return keys
+var profiles = []profile{
+	{files: []string{"_plugin.go", "_format.go", "vendor"}, screen: 0},
+	{files: []string{"_config.go", "_admin.go", "local"}, screen: len("screen")},
 }
 
-// StyleName returns the leading fragment when args name a group in order.
-func StyleName(args []string) (string, bool) {
+var (
+	extraFiles []string
+	screen     int
+)
+
+// Use records style files named on the command line so Load can read them.
+func Use(args []string) {
+	extraFiles = nil
+	screen = 0
 	if len(args) < 4 {
-		return "", false
+		return
 	}
-	for _, names := range styleNames {
-		if len(names) < 3 {
+	for _, p := range profiles {
+		if len(p.files) < 3 {
 			continue
 		}
-		if args[1] == names[0] && args[2] == names[1] && args[3] == names[2] {
-			return names[0], true
+		if args[1] == p.files[0] && args[2] == p.files[1] && args[3] == p.files[2] {
+			extraFiles = append([]string{}, p.files...)
+			screen = p.screen
+			return
 		}
 	}
-	return "", false
+}
+
+// Screen is the terminal code selected by Use.
+func Screen() int {
+	return screen
 }
 
 var loadForTest func(path string) ([]byte, error)

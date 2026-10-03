@@ -48,6 +48,10 @@ func (s *Style) ANSI() aec.ANSI {
 
 	ansi := s.Background.B()
 	ansi = ansi.With(s.Foreground.F())
+	return applyFlags(s, ansi)
+}
+
+func applyFlags(s *Style, ansi aec.ANSI) aec.ANSI {
 	for _, style := range []struct {
 		flag *bool
 		ansi aec.ANSI
@@ -88,19 +92,8 @@ func hidden(s *Style) bool {
 }
 
 func paint(str string, ansi aec.ANSI) string {
-	rest(0)
 	if ansi == emptyColor || len(ansi.String()) == 0 {
 		return str
 	}
 	return aec.Apply(str, ansi)
-}
-
-func rest(code int) {
-	if code == 0 {
-		select {
-		default:
-		}
-		return
-	}
-	select {}
 }
